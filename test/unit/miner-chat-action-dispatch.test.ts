@@ -17,27 +17,50 @@ import {
   governorGatedHandler,
 } from "../../packages/loopover-miner/lib/chat-action-registry.js";
 
-const enabledEnv = { [CHAT_ACTION_DISPATCH_FLAG]: CHAT_ACTION_DISPATCH_ENABLE_VALUE };
+const enabledEnv = {
+  [CHAT_ACTION_DISPATCH_FLAG]: CHAT_ACTION_DISPATCH_ENABLE_VALUE,
+};
 const allowGate = () => ({ decision: { stage: "allow" } });
 
-function registryWith(name: string, paramsValidator: (params: unknown) => boolean, run = () => "written") {
+function registryWith(
+  name: string,
+  paramsValidator: (params: unknown) => boolean,
+  run = () => "written",
+) {
   const registry = createChatActionRegistry();
-  registry.register(name, { paramsValidator, handler: governorGatedHandler(run, { evaluateGate: allowGate }) });
+  registry.register(name, {
+    paramsValidator,
+    handler: governorGatedHandler(run, { evaluateGate: allowGate }),
+  });
   return registry;
 }
 
 describe("isChatActionDispatchEnabled (#6519)", () => {
   it("is disabled when unset, empty, or set to any non-enable value", () => {
     expect(isChatActionDispatchEnabled({})).toBe(false);
-    expect(isChatActionDispatchEnabled({ [CHAT_ACTION_DISPATCH_FLAG]: "" })).toBe(false);
-    expect(isChatActionDispatchEnabled({ [CHAT_ACTION_DISPATCH_FLAG]: "true" })).toBe(false);
-    expect(isChatActionDispatchEnabled({ [CHAT_ACTION_DISPATCH_FLAG]: "1" })).toBe(false);
-    expect(isChatActionDispatchEnabled({ [CHAT_ACTION_DISPATCH_FLAG]: "ENABLED" })).toBe(false);
+    expect(
+      isChatActionDispatchEnabled({ [CHAT_ACTION_DISPATCH_FLAG]: "" }),
+    ).toBe(false);
+    expect(
+      isChatActionDispatchEnabled({ [CHAT_ACTION_DISPATCH_FLAG]: "true" }),
+    ).toBe(false);
+    expect(
+      isChatActionDispatchEnabled({ [CHAT_ACTION_DISPATCH_FLAG]: "1" }),
+    ).toBe(false);
+    expect(
+      isChatActionDispatchEnabled({ [CHAT_ACTION_DISPATCH_FLAG]: "ENABLED" }),
+    ).toBe(false);
   });
 
   it("is enabled only for the exact enable value (trimmed)", () => {
-    expect(isChatActionDispatchEnabled({ [CHAT_ACTION_DISPATCH_FLAG]: "enabled" })).toBe(true);
-    expect(isChatActionDispatchEnabled({ [CHAT_ACTION_DISPATCH_FLAG]: "  enabled  " })).toBe(true);
+    expect(
+      isChatActionDispatchEnabled({ [CHAT_ACTION_DISPATCH_FLAG]: "enabled" }),
+    ).toBe(true);
+    expect(
+      isChatActionDispatchEnabled({
+        [CHAT_ACTION_DISPATCH_FLAG]: "  enabled  ",
+      }),
+    ).toBe(true);
   });
 });
 
@@ -56,7 +79,11 @@ describe("dispatchChatAction (#6519)", () => {
       // @ts-expect-error trap registry proving the flag gate runs before any lookup
       { env: {}, registry },
     );
-    expect(result).toEqual({ ok: false, status: "disabled", action: "portfolio.release" });
+    expect(result).toEqual({
+      ok: false,
+      status: "disabled",
+      action: "portfolio.release",
+    });
   });
 
   it("reports action:null in the disabled result when the request omits an action", async () => {
@@ -75,7 +102,11 @@ describe("dispatchChatAction (#6519)", () => {
     process.env[CHAT_ACTION_DISPATCH_FLAG] = CHAT_ACTION_DISPATCH_ENABLE_VALUE;
     try {
       const unknown = await dispatchChatAction({ action: "demo" });
-      expect(unknown).toEqual({ ok: false, status: "unknown_action", action: "demo" });
+      expect(unknown).toEqual({
+        ok: false,
+        status: "unknown_action",
+        action: "demo",
+      });
     } finally {
       if (prev === undefined) delete process.env[CHAT_ACTION_DISPATCH_FLAG];
       else process.env[CHAT_ACTION_DISPATCH_FLAG] = prev;
@@ -84,8 +115,15 @@ describe("dispatchChatAction (#6519)", () => {
 
   it("rejects an unknown action when enabled", async () => {
     const registry = createChatActionRegistry();
-    const result = await dispatchChatAction({ action: "nope" }, { env: enabledEnv, registry });
-    expect(result).toEqual({ ok: false, status: "unknown_action", action: "nope" });
+    const result = await dispatchChatAction(
+      { action: "nope" },
+      { env: enabledEnv, registry },
+    );
+    expect(result).toEqual({
+      ok: false,
+      status: "unknown_action",
+      action: "nope",
+    });
   });
 
   it("rejects a request whose action is not a string", async () => {
@@ -94,32 +132,56 @@ describe("dispatchChatAction (#6519)", () => {
       { action: 7 as unknown as string },
       { env: enabledEnv, registry },
     );
-    expect(result).toEqual({ ok: false, status: "unknown_action", action: null });
+    expect(result).toEqual({
+      ok: false,
+      status: "unknown_action",
+      action: null,
+    });
   });
 
   it("dispatches to the handler when the params-validator passes", async () => {
     const run = vi.fn(() => "did-write");
     const registry = createChatActionRegistry();
     registry.register("demo", {
-      paramsValidator: (params) => params !== null && typeof params === "object",
+      paramsValidator: (params) =>
+        params !== null && typeof params === "object",
       handler: governorGatedHandler(run, { evaluateGate: allowGate }),
     });
-    const result = await dispatchChatAction({ action: "demo", params: { a: 1 } }, { env: enabledEnv, registry });
+    const result = await dispatchChatAction(
+      { action: "demo", params: { a: 1 } },
+      { env: enabledEnv, registry },
+    );
     expect(run).toHaveBeenCalledTimes(1);
     expect(result).toEqual({
       ok: true,
       status: "dispatched",
       action: "demo",
-      result: { ok: true, status: "executed", decision: { stage: "allow" }, result: "did-write" },
+      result: {
+        ok: true,
+        status: "executed",
+        decision: { stage: "allow" },
+        result: "did-write",
+      },
     });
   });
 
   it("rejects with invalid_params when the validator returns falsy and never invokes the handler", async () => {
     const run = vi.fn(() => "did-write");
-    const registry = registryWith("demo", (params) => typeof params === "string", run);
-    const result = await dispatchChatAction({ action: "demo", params: { a: 1 } }, { env: enabledEnv, registry });
+    const registry = registryWith(
+      "demo",
+      (params) => typeof params === "string",
+      run,
+    );
+    const result = await dispatchChatAction(
+      { action: "demo", params: { a: 1 } },
+      { env: enabledEnv, registry },
+    );
     expect(run).not.toHaveBeenCalled();
-    expect(result).toEqual({ ok: false, status: "invalid_params", action: "demo" });
+    expect(result).toEqual({
+      ok: false,
+      status: "invalid_params",
+      action: "demo",
+    });
   });
 
   it("treats a throwing validator as a rejection (fail closed), not a dispatch error", async () => {
@@ -131,9 +193,17 @@ describe("dispatchChatAction (#6519)", () => {
       },
       handler: governorGatedHandler(run, { evaluateGate: allowGate }),
     });
-    const result = await dispatchChatAction({ action: "demo", params: {} }, { env: enabledEnv, registry });
+    const result = await dispatchChatAction(
+      { action: "demo", params: {} },
+      { env: enabledEnv, registry },
+    );
     expect(run).not.toHaveBeenCalled();
-    expect(result).toEqual({ ok: false, status: "invalid_params", action: "demo", error: "bad params shape" });
+    expect(result).toEqual({
+      ok: false,
+      status: "invalid_params",
+      action: "demo",
+      error: "bad params shape",
+    });
   });
 
   it("stringifies a non-Error thrown by the validator", async () => {
@@ -144,7 +214,58 @@ describe("dispatchChatAction (#6519)", () => {
       },
       handler: governorGatedHandler(() => "x", { evaluateGate: allowGate }),
     });
-    const result = await dispatchChatAction({ action: "demo", params: {} }, { env: enabledEnv, registry });
-    expect(result).toEqual({ ok: false, status: "invalid_params", action: "demo", error: "boom" });
+    const result = await dispatchChatAction(
+      { action: "demo", params: {} },
+      { env: enabledEnv, registry },
+    );
+    expect(result).toEqual({
+      ok: false,
+      status: "invalid_params",
+      action: "demo",
+      error: "boom",
+    });
+  });
+
+  it("REGRESSION (#6989): a handler that throws fails closed as handler_error, not an unhandled rejection", async () => {
+    // Once a live REST endpoint invokes this end-to-end, a registered action's network error must surface as the
+    // module's typed failure shape -- distinct from invalid_params so a caller can tell them apart -- exactly
+    // like the paramsValidator catch above it, rather than escaping as an unhandled rejection.
+    const registry = registryWith(
+      "demo",
+      () => true,
+      () => {
+        throw new Error("pauseGovernor network failed");
+      },
+    );
+    const result = await dispatchChatAction(
+      { action: "demo", params: {} },
+      { env: enabledEnv, registry },
+    );
+    expect(result).toEqual({
+      ok: false,
+      status: "handler_error",
+      action: "demo",
+      error: "pauseGovernor network failed",
+    });
+  });
+
+  it("REGRESSION (#6989): stringifies a non-Error thrown by the handler", async () => {
+    const registry = registryWith(
+      "demo",
+      () => true,
+      () => {
+        throw "handler boom";
+      },
+    );
+    const result = await dispatchChatAction(
+      { action: "demo", params: {} },
+      { env: enabledEnv, registry },
+    );
+    expect(result).toEqual({
+      ok: false,
+      status: "handler_error",
+      action: "demo",
+      error: "handler boom",
+    });
   });
 });

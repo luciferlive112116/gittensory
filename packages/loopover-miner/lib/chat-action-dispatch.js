@@ -29,7 +29,9 @@ export const CHAT_ACTION_DISPATCH_ENABLE_VALUE = "enabled";
  */
 export function isChatActionDispatchEnabled(env = process.env) {
   const raw = env?.[CHAT_ACTION_DISPATCH_FLAG];
-  return typeof raw === "string" && raw.trim() === CHAT_ACTION_DISPATCH_ENABLE_VALUE;
+  return (
+    typeof raw === "string" && raw.trim() === CHAT_ACTION_DISPATCH_ENABLE_VALUE
+  );
 }
 
 /**
@@ -65,13 +67,33 @@ export async function dispatchChatAction(request, options = {}) {
     valid = registered.paramsValidator(request?.params) === true;
   } catch (error) {
     // A validator that throws is treated as a rejection (fail closed), not as a dispatch error.
-    return { ok: false, status: "invalid_params", action, error: error instanceof Error ? error.message : String(error) };
+    return {
+      ok: false,
+      status: "invalid_params",
+      action,
+      error: error instanceof Error ? error.message : String(error),
+    };
   }
   if (!valid) {
     return { ok: false, status: "invalid_params", action };
   }
 
-  const result = await registered.handler(request);
+  // Fail closed like the paramsValidator catch above (and pretooluse-hook.js/sentry.js): a handler that throws
+  // -- e.g. a network error from a registered action's own client -- becomes the module's typed failure result,
+  // not an unhandled rejection, once a live REST endpoint (#6839 and siblings) invokes this end-to-end. `status`
+  // is distinct from invalid_params/unknown_action so a caller can tell a handler-execution failure apart from a
+  // validation failure (#6989).
+  let result;
+  try {
+    result = await registered.handler(request);
+  } catch (error) {
+    return {
+      ok: false,
+      status: "handler_error",
+      action,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
   return { ok: true, status: "dispatched", action, result };
 }
 
